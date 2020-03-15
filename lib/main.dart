@@ -1,100 +1,105 @@
-// ソース: https://flutter.dev/docs/cookbook/networking/background-parsing
+// https://flutter.dev/docs/cookbook/networking/send-data
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-Future<List<Photo>> fetchPhotos(http.Client client) async {
-  final response =
-      await client.get('https://jsonplaceholder.typicode.com/photos');
+Future<Album> createAlbum(String title) async {
+  final http.Response response = await http.post(
+    'https://jsonplaceholder.typicode.com/albums',
+    headers: <String, String>{
+      'Content-Type': 'application/json; charset=UTF-8',
+    },
+    body: jsonEncode(<String, String>{
+      'title': title,
+    }),
+  );
 
-  // Use the compute function to run parsePhotos in a separate isolate.
-  return compute(parsePhotos, response.body);
+  if (response.statusCode == 201) {
+    return Album.fromJson(json.decode(response.body));
+  } else {
+    throw Exception('Failed to create album.');
+  }
 }
 
-// A function that converts a response body into a List<Photo>.
-List<Photo> parsePhotos(String responseBody) {
-  final parsed = jsonDecode(responseBody).cast<Map<String, dynamic>>();
-
-  return parsed.map<Photo>((json) => Photo.fromJson(json)).toList();
-}
-
-class Photo {
-  final int albumId;
+class Album {
   final int id;
   final String title;
-  final String url;
-  final String thumbnailUrl;
 
-  Photo({this.albumId, this.id, this.title, this.url, this.thumbnailUrl});
+  Album({this.id, this.title});
 
-  factory Photo.fromJson(Map<String, dynamic> json) {
-    return Photo(
-      albumId: json['albumId'] as int,
-      id: json['id'] as int,
-      title: json['title'] as String,
-      url: json['url'] as String,
-      thumbnailUrl: json['thumbnailUrl'] as String,
+  factory Album.fromJson(Map<String, dynamic> json) {
+    return Album(
+      id: json['id'],
+      title: json['title'],
     );
   }
 }
 
-void main() => runApp(MyApp());
+void main() {
+  runApp(MyApp());
+}
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
+  MyApp({Key key}) : super(key: key);
+
+  @override
+  _MyAppState createState() {
+    return _MyAppState();
+  }
+}
+
+class _MyAppState extends State<MyApp> {
+  final TextEditingController _controller = TextEditingController();
+  Future<Album> _futureAlbum;
+
   @override
   Widget build(BuildContext context) {
-    final appTitle = 'Isolate Demo';
-
     return MaterialApp(
-      title: appTitle,
-      home: MyHomePage(title: appTitle),
-    );
-  }
-}
-
-class MyHomePage extends StatelessWidget {
-  final String title;
-
-  MyHomePage({Key key, this.title}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
+      title: 'Create Data Example',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
       ),
-      body: FutureBuilder<List<Photo>>(
-        future: fetchPhotos(http.Client()),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) print(snapshot.error);
+      home: Scaffold(
+        appBar: AppBar(
+          title: Text('Create Data Example'),
+        ),
+        body: Container(
+          alignment: Alignment.center,
+          padding: const EdgeInsets.all(8.0),
+          child: (_futureAlbum == null)
+              ? Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    TextField(
+                      controller: _controller,
+                      decoration: InputDecoration(hintText: 'Enter Title'),
+                    ),
+                    RaisedButton(
+                      child: Text('Create Data'),
+                      onPressed: () {
+                        setState(() {
+                          _futureAlbum = createAlbum(_controller.text);
+                        });
+                      },
+                    ),
+                  ],
+                )
+              : FutureBuilder<Album>(
+                  future: _futureAlbum,
+                  builder: (context, snapshot) {
+                    if (snapshot.hasData) {
+                      return Text(snapshot.data.title);
+                    } else if (snapshot.hasError) {
+                      return Text("${snapshot.error}");
+                    }
 
-          return snapshot.hasData
-              ? PhotosList(photos: snapshot.data)
-              : Center(child: CircularProgressIndicator());
-        },
+                    return CircularProgressIndicator();
+                  },
+                ),
+        ),
       ),
-    );
-  }
-}
-
-class PhotosList extends StatelessWidget {
-  final List<Photo> photos;
-
-  PhotosList({Key key, this.photos}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.builder(
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-      ),
-      itemCount: photos.length,
-      itemBuilder: (context, index) {
-        return Image.network(photos[index].thumbnailUrl);
-      },
     );
   }
 }
